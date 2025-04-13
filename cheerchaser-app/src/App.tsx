@@ -34,7 +34,7 @@ function App() {
 
   // Suggestion input state
   const [numSpotsToSuggest, setNumSpotsToSuggest] = useState<number>(3);
-  const [suggestionStrategy, setSuggestionStrategy] = useState<Utils.SuggestionStrategy>('maxSpread');
+  const [suggestionStrategy, setSuggestionStrategy] = useState<Utils.SuggestionStrategy>('minTravel');
   const [skipFirstKm, setSkipFirstKm] = useState<number>(0); // Add state for skipping km
 
   // State for sidebar visibility on mobile

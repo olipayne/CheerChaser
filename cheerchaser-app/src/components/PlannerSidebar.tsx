@@ -73,7 +73,7 @@ const PlannerSidebar: React.FC<PlannerSidebarProps> = ({
   const travelOptions: { value: Utils.TravelProfile, label: string }[] = [
     { value: 'walking', label: 'Walking' },
     { value: 'cycling', label: 'Cycling' },
-    { value: 'transit', label: 'Public Transport' },
+    // { value: 'transit', label: 'Public Transport' }, // Remove transit option
   ];
 
   const suggestionStrategyOptions: { value: Utils.SuggestionStrategy, label: string }[] = [
@@ -156,7 +156,8 @@ const PlannerSidebar: React.FC<PlannerSidebarProps> = ({
               ))}
             </RadioGroup>
             <p className="text-xs text-muted-foreground pt-1">
-              Note: Routing does not account for road closures or crossing delays. Public transport routing is currently unavailable.
+              Note: Routing does not account for road closures or crossing delays.
+              {/* Removed mention of public transport */}
             </p>
           </div>
         </CardContent>
