@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: /sitemap.xml # Add this later if you generate one 
