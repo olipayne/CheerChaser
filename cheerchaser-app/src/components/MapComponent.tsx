@@ -128,6 +128,19 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
     }
   }, [runnerPace, raceStartTime]); // Dependencies for the callback
 
+  // Function to hide the trail info tooltip and marker
+  const hideTrailInfo = useCallback((map: L.Map | null) => {
+    if (!map) return;
+    if (trailTooltipRef.current) {
+      map.closeTooltip(trailTooltipRef.current);
+      trailTooltipRef.current = null;
+    }
+    if (trailHoverMarkerRef.current) {
+      map.removeLayer(trailHoverMarkerRef.current);
+      trailHoverMarkerRef.current = null;
+    }
+  }, []);
+
   // Effect for initializing the map
   useEffect(() => {
     let map: L.Map | null = null;
@@ -139,22 +152,15 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
       }).addTo(map);
       markerLayerRef.current = L.layerGroup().addTo(map);
 
-      // Add map click handler to close trail tooltip/marker
-      map.on('click', () => {
-        if (trailTooltipRef.current) {
-          map?.closeTooltip(trailTooltipRef.current);
-          trailTooltipRef.current = null;
-        }
-        if (trailHoverMarkerRef.current) {
-          map?.removeLayer(trailHoverMarkerRef.current);
-          trailHoverMarkerRef.current = null;
-        }
-      });
+      // Remove map click handler - dismissal handled by polyline click toggle
+      // map.on('click', () => {
+      //   hideTrailInfo(map);
+      // });
     }
     return () => {
       // Cleanup map instance and handlers
       if (map) {
-        map.off('click'); // Remove the map click listener
+        // map.off('click'); // No longer need to remove map click listener
         map.remove();
         mapInstanceRef.current = null;
       }
@@ -224,10 +230,17 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
           showTrailInfo(e.latlng, map, points, cumulativeDistances);
         });
 
-        // Add click handler for mobile tap interaction
+        // Add click handler for mobile tap interaction - TOGGLE behaviour
         polyline.on('click', (e) => {
-          L.DomEvent.stopPropagation(e); // Prevent map click handler from firing immediately
-          showTrailInfo(e.latlng, map, points, cumulativeDistances);
+          L.DomEvent.stopPropagation(e); // Prevent map click handler (if any existed) from firing
+          
+          // Check if info is already shown, if so, hide it (toggle off)
+          if (trailTooltipRef.current || trailHoverMarkerRef.current) {
+             hideTrailInfo(map); // Use helper to hide
+          } else {
+            // Otherwise, show it (toggle on)
+            showTrailInfo(e.latlng, map, points, cumulativeDistances);
+          }
         });
         
         polyline.addTo(map);
@@ -435,7 +448,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
     } else {
       onMarkerPositionsCalculated(new Map());
     }
-  }, [gpxData, runnerPace, selectedSpots, onSpotToggle, onMarkerPositionsCalculated, raceStartTime, showTrailInfo]); // Add showTrailInfo to dependencies
+  }, [gpxData, runnerPace, selectedSpots, onSpotToggle, onMarkerPositionsCalculated, raceStartTime, showTrailInfo, hideTrailInfo]); // Add showTrailInfo & hideTrailInfo to dependencies
 
   // Effect for handling routing based on waypoints and travel profile
   useEffect(() => {
