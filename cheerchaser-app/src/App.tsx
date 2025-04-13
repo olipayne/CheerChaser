@@ -359,8 +359,8 @@ function App() {
           />
         </aside>
 
-        {/* Map takes remaining space - adjust margin based on sidebar visibility on desktop */}
-        <main className={`grow h-full transition-all duration-300 ease-in-out ${isSidebarOpen ? 'md:ml-0' : 'md:ml-0'} `}>
+        {/* Map takes remaining space - Ensure it's below the header/sidebar toggle */}
+        <main className={`flex-grow h-full transition-all duration-300 ease-in-out relative z-0`}>
           {/* Map Content */}
           <MapComponent
             gpxData={gpxData}
