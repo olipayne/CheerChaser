@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useCallback } from 'react';
 import L, { LatLng } from 'leaflet';
 import 'leaflet-routing-machine'; // Import routing machine
 import 'leaflet-routing-machine/dist/leaflet-routing-machine.css'; // Import routing machine CSS
@@ -50,6 +50,84 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
   const trailCumulativeDistancesRef = useRef<number[]>([]);
   const trailHoverMarkerRef = useRef<L.CircleMarker | null>(null); // Ref for hover marker
 
+  // Helper function to display tooltip and marker for a given LatLng
+  const showTrailInfo = useCallback((latlng: L.LatLng, map: L.Map | null, points: LatLng[], cumulativeDistances: number[]) => {
+    if (!map) return;
+
+    const { distance, point, segmentIndex, ratio } = findNearestPointOnTrail(latlng, points);
+    // console.log("Nearest Point Data:", { distance, point: `(${point.lat.toFixed(5)}, ${point.lng.toFixed(5)})`, segmentIndex, ratio: ratio.toFixed(3) });
+
+    // Only show tooltip and marker if reasonably close to the trail (40 meters)
+    if (distance > 40) { // Increased threshold for stickiness
+      // Hide if currently shown (e.g., from mousemove)
+      if (trailTooltipRef.current) {
+        map.closeTooltip(trailTooltipRef.current);
+        trailTooltipRef.current = null;
+      }
+      if (trailHoverMarkerRef.current) {
+        map.removeLayer(trailHoverMarkerRef.current);
+        trailHoverMarkerRef.current = null;
+      }
+      return;
+    }
+
+    // Find distance along the trail using the precise segment and ratio
+    const trailDistance = calculateDistanceAlongTrail(segmentIndex, ratio, points, cumulativeDistances);
+    // console.log("Calculated Trail Distance:", trailDistance.toFixed(1));
+
+    // Format distance
+    const distanceString = Utils.formatDistanceString(trailDistance);
+
+    // Calculate time based on runner pace
+    const secondsPerMeter = Utils.parsePaceToSecondsPerMeter(runnerPace);
+    let timeString = "";
+
+    if (secondsPerMeter !== null) {
+      const totalSeconds = trailDistance * secondsPerMeter;
+
+      if (raceStartTime && /^\d{2}:\d{2}$/.test(raceStartTime)) {
+        timeString = Utils.calculateRealTimeETA(raceStartTime, totalSeconds);
+      } else {
+        timeString = Utils.formatSecondsToHoursMinutes(totalSeconds);
+      }
+    } else {
+      timeString = "(Set pace for time)";
+    }
+
+    // Create or update tooltip
+    const tooltipContent = `<div><strong>${distanceString}</strong><br/>ETA: ${timeString}</div>`;
+
+    if (trailTooltipRef.current) {
+      trailTooltipRef.current.setLatLng(point);
+      trailTooltipRef.current.setContent(tooltipContent);
+    } else {
+      trailTooltipRef.current = L.tooltip({
+        offset: [0, -5],
+        className: 'trail-tooltip',
+        opacity: 0.9,
+        sticky: true, // Keep tooltip open on mobile after tap
+      })
+      .setLatLng(point)
+      .setContent(tooltipContent)
+      .openOn(map);
+    }
+
+    // Create or update hover marker
+    if (trailHoverMarkerRef.current) {
+      trailHoverMarkerRef.current.setLatLng(point);
+    } else {
+      trailHoverMarkerRef.current = L.circleMarker(point, {
+        radius: 5,
+        fillColor: "#3182ce", // Match tooltip border color
+        color: "#fff",
+        weight: 1,
+        opacity: 1,
+        fillOpacity: 0.8,
+        interactive: false, // Marker shouldn't capture events
+      }).addTo(map);
+    }
+  }, [runnerPace, raceStartTime]); // Dependencies for the callback
+
   // Effect for initializing the map
   useEffect(() => {
     let map: L.Map | null = null;
@@ -60,14 +138,28 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
         attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
       }).addTo(map);
       markerLayerRef.current = L.layerGroup().addTo(map);
+
+      // Add map click handler to close trail tooltip/marker
+      map.on('click', () => {
+        if (trailTooltipRef.current) {
+          map?.closeTooltip(trailTooltipRef.current);
+          trailTooltipRef.current = null;
+        }
+        if (trailHoverMarkerRef.current) {
+          map?.removeLayer(trailHoverMarkerRef.current);
+          trailHoverMarkerRef.current = null;
+        }
+      });
     }
     return () => {
+      // Cleanup map instance and handlers
       if (map) {
+        map.off('click'); // Remove the map click listener
         map.remove();
         mapInstanceRef.current = null;
       }
     };
-  }, []);
+  }, []); // Empty dependency array ensures this runs only once
 
   // Effect for calculating potential spots and drawing selected ones
   useEffect(() => {
@@ -115,7 +207,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
           map.getContainer().style.cursor = 'pointer';
         });
         
-        polyline.on('mouseout', () => {
+        polyline.on('mouseout', () => { // Keep mouseout for desktop hover
           map.getContainer().style.cursor = '';
           if (trailTooltipRef.current) {
             map.closeTooltip(trailTooltipRef.current);
@@ -128,81 +220,14 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
           }
         });
         
-        polyline.on('mousemove', (e) => {
-          console.log("Mousemove Event Fired:", e.latlng);
-          // Calculate distance and time at this point
-          const latlng = e.latlng;
-          const { distance, point, segmentIndex, ratio } = findNearestPointOnTrail(latlng, points);
-          console.log("Nearest Point Data:", { distance, point: `(${point.lat.toFixed(5)}, ${point.lng.toFixed(5)})`, segmentIndex, ratio: ratio.toFixed(3) });
-          
-          // Only show tooltip and marker if reasonably close to the trail (40 meters)
-          if (distance > 1000) { // Increased threshold for stickiness
-            if (trailTooltipRef.current) {
-              map.closeTooltip(trailTooltipRef.current);
-              trailTooltipRef.current = null;
-            }
-            // Remove hover marker if too far
-            if (trailHoverMarkerRef.current) {
-              map.removeLayer(trailHoverMarkerRef.current);
-              trailHoverMarkerRef.current = null;
-            }
-            return;
-          }
-          
-          // Find distance along the trail using the precise segment and ratio
-          const trailDistance = calculateDistanceAlongTrail(segmentIndex, ratio, points, cumulativeDistances);
-          console.log("Calculated Trail Distance:", trailDistance.toFixed(1));
-          
-          // Format distance 
-          const distanceString = Utils.formatDistanceString(trailDistance);
-          
-          // Calculate time based on runner pace
-          const secondsPerMeter = Utils.parsePaceToSecondsPerMeter(runnerPace);
-          let timeString = "";
-          
-          if (secondsPerMeter !== null) {
-            const totalSeconds = trailDistance * secondsPerMeter;
-            
-            if (raceStartTime && /^\d{2}:\d{2}$/.test(raceStartTime)) {
-              timeString = Utils.calculateRealTimeETA(raceStartTime, totalSeconds);
-            } else {
-              timeString = Utils.formatSecondsToHoursMinutes(totalSeconds);
-            }
-          } else {
-            timeString = "(Set pace for time)";
-          }
-          
-          // Create or update tooltip
-          const tooltipContent = `<div><strong>${distanceString}</strong><br/>ETA: ${timeString}</div>`;
-          
-          if (trailTooltipRef.current) {
-            trailTooltipRef.current.setLatLng(point);
-            trailTooltipRef.current.setContent(tooltipContent);
-          } else {
-            trailTooltipRef.current = L.tooltip({
-              offset: [0, -5],
-              className: 'trail-tooltip',
-              opacity: 0.9,
-            })
-            .setLatLng(point)
-            .setContent(tooltipContent)
-            .openOn(map);
-          }
+        polyline.on('mousemove', (e) => { // Handles desktop hover
+          showTrailInfo(e.latlng, map, points, cumulativeDistances);
+        });
 
-          // Create or update hover marker
-          if (trailHoverMarkerRef.current) {
-            trailHoverMarkerRef.current.setLatLng(point);
-          } else {
-            trailHoverMarkerRef.current = L.circleMarker(point, {
-              radius: 5,
-              fillColor: "#3182ce", // Match tooltip border color
-              color: "#fff",
-              weight: 1,
-              opacity: 1,
-              fillOpacity: 0.8,
-              interactive: false, // Marker shouldn't capture events
-            }).addTo(map);
-          }
+        // Add click handler for mobile tap interaction
+        polyline.on('click', (e) => {
+          L.DomEvent.stopPropagation(e); // Prevent map click handler from firing immediately
+          showTrailInfo(e.latlng, map, points, cumulativeDistances);
         });
         
         polyline.addTo(map);
@@ -410,7 +435,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
     } else {
       onMarkerPositionsCalculated(new Map());
     }
-  }, [gpxData, runnerPace, selectedSpots, onSpotToggle, onMarkerPositionsCalculated, raceStartTime]);
+  }, [gpxData, runnerPace, selectedSpots, onSpotToggle, onMarkerPositionsCalculated, raceStartTime, showTrailInfo]); // Add showTrailInfo to dependencies
 
   // Effect for handling routing based on waypoints and travel profile
   useEffect(() => {
