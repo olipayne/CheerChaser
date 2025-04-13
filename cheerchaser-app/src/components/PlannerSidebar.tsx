@@ -286,7 +286,7 @@ const PlannerSidebar: React.FC<PlannerSidebarProps> = ({
                 return (
                   <li key={distance}>
                     <div className="flex justify-between items-start space-x-2">
-                      <div className="flex-grow">
+                      <div className="grow">
                         <p className="font-semibold">{distanceString}</p>
                         <p className="text-sm text-muted-foreground">{etaString}</p>
                         {segmentTimeString && (<p className="text-xs text-sky-600">(Spectator travel from previous: ~{segmentTimeString})</p>)}

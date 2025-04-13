@@ -563,7 +563,7 @@ const MapComponent: React.FC<MapComponentProps> = ({ gpxData, runnerPace, select
   };
 
   // The actual component return
-  return <div ref={mapContainerRef} className="flex-grow h-full" />;
+  return <div ref={mapContainerRef} className="grow h-full" />;
 };
 
 export default MapComponent; 
